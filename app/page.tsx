@@ -1,3 +1,5 @@
+import SyncOrb from "./components/SyncOrb";
+
 const verses = [
   {
     id: 1,
@@ -40,44 +42,63 @@ const verses = [
 
 export default function Home() {
   return (
-    <div className="flex min-h-svh items-start justify-center font-sans">
-      <main className="flex w-full max-w-2xl flex-col items-center px-6 py-24 sm:py-32">
-        {/* Surah header */}
-        <header className="mb-16 text-center">
-          <h1
-            className="font-arabic text-3xl font-bold leading-relaxed text-foreground"
-            dir="rtl"
-          >
-            الفاتحة
-          </h1>
-          <p className="mt-1 text-sm tracking-widest text-muted uppercase">
-            The Opener
-          </p>
-        </header>
+    <div className="relative min-h-svh font-sans">
+      {/* Fixed background image - stays in place while content scrolls */}
+      <div
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url(/green-wide.jpg)" }}
+        aria-hidden
+      />
+      {/* Semi-opaque overlay for text readability */}
+      <div className="fixed inset-0 bg-(--background)/50" aria-hidden />
+      {/* Scrollable content */}
+      <main className="relative flex min-h-svh items-start justify-center">
+        <div className="flex w-full max-w-2xl flex-col items-center px-6 pt-24 pb-40 sm:pt-32">
+          {/* Surah header */}
+          <header className="mb-16 text-center">
+            <h1
+              className="font-arabic text-6xl font-bold leading-relaxed text-foreground"
+              dir="rtl"
+            >
+              الفاتحة
+            </h1>
+            <p className="mt-1 text-lg tracking-widest text-white uppercase">
+              The Opener
+            </p>
+          </header>
 
-        {/* Verses */}
-        <div className="flex w-full flex-col gap-14">
-          {verses.map((verse) => (
-            <article key={verse.id} className="flex flex-col items-center gap-5">
-              <span className="text-xs tabular-nums text-muted">
-                {verse.id}
-              </span>
-
-              <p
-                className="font-arabic text-center text-[1.75rem] leading-[2.8] font-normal text-foreground sm:text-3xl"
-                dir="rtl"
-                lang="ar"
+          {/* Verses */}
+          <div className="flex w-full flex-col gap-14">
+            {verses.map((verse) => (
+              <article
+                key={verse.id}
+                className="flex flex-col items-center gap-5"
               >
-                {verse.text}
-              </p>
+                <span className="text-xs tabular-nums text-white">
+                  {verse.id}
+                </span>
 
-              <p className="max-w-md text-center text-base leading-7 text-secondary">
-                {verse.translation}
-              </p>
-            </article>
-          ))}
+                <p
+                  className="font-arabic text-center text-[1.75rem] leading-[2.8] font-normal text-foreground sm:text-3xl"
+                  dir="rtl"
+                  lang="ar"
+                >
+                  {verse.text}
+                </p>
+
+                <p className="max-w-md text-center text-base leading-7 text-white">
+                  {verse.translation}
+                </p>
+              </article>
+            ))}
+          </div>
         </div>
       </main>
+
+      {/* Fixed sync orb at bottom */}
+      <div className="fixed bottom-8 left-1/2 z-10 -translate-x-1/2">
+        <SyncOrb />
+      </div>
     </div>
   );
 }
