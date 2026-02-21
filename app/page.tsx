@@ -56,9 +56,16 @@ export default function Home() {
       {/* Content */}
       <main className="relative flex min-h-svh items-start justify-center">
         <div
-          className="flex w-full max-w-2xl flex-col items-center px-6 pt-24 sm:pt-32"
+          className="flex w-full max-w-2xl flex-col items-center px-6 pt-24 sm:pt-32 mb-4"
           // Give enough space so the last verse never lives under the control
-          style={{ paddingBottom: "calc(260px + env(safe-area-inset-bottom))" }}
+          style={{
+            paddingBottom: "calc(234px + env(safe-area-inset-bottom))",
+            // Hard clip: verse content fully disappears before entering orb area.
+            WebkitMaskImage:
+              "linear-gradient(to bottom, black 0%, black calc(100% - 260px), rgba(0,0,0,0.85) calc(100% - 230px), transparent calc(100% - 170px), transparent 100%)",
+            maskImage:
+              "linear-gradient(to bottom, black 0%, black calc(100% - 260px), rgba(0,0,0,0.85) calc(100% - 230px), transparent calc(100% - 170px), transparent 100%)",
+          }}
         >
           <header className="mb-16 text-center">
             <h1
@@ -99,35 +106,31 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Bottom scrim (global) */}
-      <div
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-10 h-48"
-        style={{
-          background:
-            "linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.26) 42%, rgba(0,0,0,0.0) 100%)",
-          WebkitMaskImage:
-            "linear-gradient(to top, black 75%, transparent 100%)",
-          maskImage: "linear-gradient(to top, black 75%, transparent 100%)",
-        }}
-        aria-hidden
-      />
+      {/* Bottom dock that text scrolls behind, with blur/clip fade */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 h-56">
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to top, rgba(4,12,8,0.8) 0%, rgba(4,12,8,0.56) 38%, rgba(4,12,8,0.18) 72%, rgba(4,12,8,0) 100%)",
+            backdropFilter: "blur(9px)",
+            WebkitBackdropFilter: "blur(9px)",
+            WebkitMaskImage:
+              "linear-gradient(to top, black 26%, rgba(0,0,0,0.96) 52%, rgba(0,0,0,0.45) 78%, transparent 100%)",
+            maskImage:
+              "linear-gradient(to top, black 26%, rgba(0,0,0,0.96) 52%, rgba(0,0,0,0.45) 78%, transparent 100%)",
+          }}
+          aria-hidden
+        />
 
-      {/* Localized contrast under the control (stops text fighting it) */}
-      <div
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-10 h-40"
-        style={{
-          background:
-            "radial-gradient(220px 140px at 50% 92%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.22) 45%, transparent 75%)",
-        }}
-        aria-hidden
-      />
-
-      {/* Control */}
-      <div
-        className="fixed inset-x-0 bottom-10 z-20 flex justify-center"
-        style={{ paddingBottom: "calc(22px + env(safe-area-inset-bottom))" }}
-      >
-        <SyncOrb />
+        <div
+          className="absolute inset-x-0 bottom-10 z-30 flex justify-center"
+          style={{ paddingBottom: "calc(22px + env(safe-area-inset-bottom))" }}
+        >
+          <div className="pointer-events-auto">
+            <SyncOrb />
+          </div>
+        </div>
       </div>
     </div>
   );

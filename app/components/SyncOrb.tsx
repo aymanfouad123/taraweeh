@@ -123,11 +123,11 @@ export default function SyncOrb() {
       </div>
 
       {/* Fixed label height prevents vertical jitter when text changes */}
-      <div className="flex h-5 items-center justify-center">
+      <div className="flex h-0 items-center justify-center">
         <AnimatePresence mode="wait">
           <motion.span
             key={isActive ? "listening" : "sync"}
-            className="text-[13px] tracking-[0.22em] text-white uppercase select-none"
+            className="text-[11px] tracking-[0.22em] text-white uppercase select-none"
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
