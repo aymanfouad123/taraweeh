@@ -43,18 +43,23 @@ const verses = [
 export default function Home() {
   return (
     <div className="relative min-h-svh font-sans">
-      {/* Fixed background image - stays in place while content scrolls */}
+      {/* Fixed background */}
       <div
         className="fixed inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url(/green-wide.jpg)" }}
         aria-hidden
       />
-      {/* Semi-opaque overlay for text readability */}
+
+      {/* Overall readability overlay */}
       <div className="fixed inset-0 bg-(--background)/50" aria-hidden />
-      {/* Scrollable content */}
+
+      {/* Content */}
       <main className="relative flex min-h-svh items-start justify-center">
-        <div className="flex w-full max-w-2xl flex-col items-center px-6 pt-24 pb-40 sm:pt-32">
-          {/* Surah header */}
+        <div
+          className="flex w-full max-w-2xl flex-col items-center px-6 pt-24 sm:pt-32"
+          // Give enough space so the last verse never lives under the control
+          style={{ paddingBottom: "calc(260px + env(safe-area-inset-bottom))" }}
+        >
           <header className="mb-16 text-center">
             <h1
               className="font-arabic text-6xl font-bold leading-relaxed text-foreground"
@@ -67,7 +72,6 @@ export default function Home() {
             </p>
           </header>
 
-          {/* Verses */}
           <div className="flex w-full flex-col gap-14">
             {verses.map((verse) => (
               <article
@@ -95,8 +99,34 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Fixed sync orb at bottom */}
-      <div className="fixed bottom-8 left-1/2 z-10 -translate-x-1/2">
+      {/* Bottom scrim (global) */}
+      <div
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-10 h-48"
+        style={{
+          background:
+            "linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.26) 42%, rgba(0,0,0,0.0) 100%)",
+          WebkitMaskImage:
+            "linear-gradient(to top, black 75%, transparent 100%)",
+          maskImage: "linear-gradient(to top, black 75%, transparent 100%)",
+        }}
+        aria-hidden
+      />
+
+      {/* Localized contrast under the control (stops text fighting it) */}
+      <div
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-10 h-40"
+        style={{
+          background:
+            "radial-gradient(220px 140px at 50% 92%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.22) 45%, transparent 75%)",
+        }}
+        aria-hidden
+      />
+
+      {/* Control */}
+      <div
+        className="fixed inset-x-0 bottom-10 z-20 flex justify-center"
+        style={{ paddingBottom: "calc(22px + env(safe-area-inset-bottom))" }}
+      >
         <SyncOrb />
       </div>
     </div>
