@@ -16,11 +16,13 @@ type HomeContentProps = {
   surahTransliteration: string;
 };
 
-const observerOptions: IntersectionObserverInit = {
-  root: null,
-  rootMargin: "-30% 0px -20% 0px",
-  threshold: [0, 0.25, 0.5, 0.75, 1],
-};
+const VIEWPORT_ANCHOR_RATIO = 0.38;
+const TOP_EDGE_SPACER = "0px";
+const BOTTOM_EDGE_SPACER = "calc(62vh + 14rem)";
+const SCROLL_END_TOLERANCE_PX = 1;
+const NEAR_TARGET_TOLERANCE_PX = 12;
+const SCROLL_STABLE_FRAMES = 3;
+const SCROLL_LOCK_MAX_MS = 1800;
 
 export default function HomeContent({
   verses,
@@ -29,36 +31,139 @@ export default function HomeContent({
 }: HomeContentProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const sectionRefs = useRef<(HTMLElement | null)[]>([]);
+  const activeIndexRef = useRef(0);
+  const isProgrammaticScrollRef = useRef(false);
+  const scrollSettleRafRef = useRef<number | null>(null);
+  const scrollTickRafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const refs = sectionRefs.current;
-    const visible = new Map<number, number>();
+    activeIndexRef.current = activeIndex;
+  }, [activeIndex]);
 
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        const index = refs.indexOf(entry.target as HTMLElement);
-        if (index === -1) continue;
-        visible.set(index, entry.intersectionRatio);
-      }
-      if (visible.size === 0) return;
-      let best = 0;
-      let bestRatio = 0;
-      visible.forEach((ratio, idx) => {
-        if (ratio > bestRatio) {
-          bestRatio = ratio;
+  useEffect(() => {
+    const getClosestIndexToAnchor = () => {
+      const anchorY = window.innerHeight * VIEWPORT_ANCHOR_RATIO;
+      let best = -1;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      sectionRefs.current.forEach((el, idx) => {
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const centerY = rect.top + rect.height / 2;
+        const distance = Math.abs(centerY - anchorY);
+        if (distance < bestDistance) {
+          bestDistance = distance;
           best = idx;
         }
       });
-      setActiveIndex(best);
-    }, observerOptions);
 
-    refs.forEach((el) => el && observer.observe(el));
-    return () => observer.disconnect();
+      return best;
+    };
+
+    const syncActiveFromViewport = () => {
+      if (scrollTickRafRef.current !== null) return;
+      scrollTickRafRef.current = window.requestAnimationFrame(() => {
+        scrollTickRafRef.current = null;
+        if (isProgrammaticScrollRef.current) return;
+        const best = getClosestIndexToAnchor();
+        if (best !== -1 && best !== activeIndexRef.current) {
+          setActiveIndex(best);
+        }
+      });
+    };
+
+    syncActiveFromViewport();
+    window.addEventListener("scroll", syncActiveFromViewport, { passive: true });
+    window.addEventListener("resize", syncActiveFromViewport);
+
+    return () => {
+      window.removeEventListener("scroll", syncActiveFromViewport);
+      window.removeEventListener("resize", syncActiveFromViewport);
+      if (scrollTickRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollTickRafRef.current);
+        scrollTickRafRef.current = null;
+      }
+    };
   }, [verses.length]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollSettleRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollSettleRafRef.current);
+      }
+      if (scrollTickRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollTickRafRef.current);
+      }
+    };
+  }, []);
 
   const scrollToVerse = (index: number) => {
     const el = sectionRefs.current[index];
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const rawTargetY =
+      window.scrollY +
+      rect.top +
+      rect.height / 2 -
+      window.innerHeight * VIEWPORT_ANCHOR_RATIO;
+    const maxScrollY = Math.max(
+      0,
+      document.documentElement.scrollHeight - window.innerHeight
+    );
+    const targetY = Math.min(Math.max(0, rawTargetY), maxScrollY);
+    const isEdgeCase = targetY === 0 || targetY === maxScrollY;
+    const settleTolerance = isEdgeCase
+      ? NEAR_TARGET_TOLERANCE_PX
+      : SCROLL_END_TOLERANCE_PX;
+
+    if (scrollSettleRafRef.current !== null) {
+      window.cancelAnimationFrame(scrollSettleRafRef.current);
+      scrollSettleRafRef.current = null;
+    }
+
+    isProgrammaticScrollRef.current = true;
+    setActiveIndex(index);
+
+    // Use double requestAnimationFrame to let React's render complete before scrolling
+    // This prevents the smooth scroll from being cancelled by re-renders
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: targetY, behavior: "smooth" });
+      });
+    });
+
+    const lockStart = performance.now();
+    let stableFrameCount = 0;
+    let lastY = window.scrollY;
+
+    const checkSettle = () => {
+      const currentY = window.scrollY;
+      const distanceToTarget = Math.abs(currentY - targetY);
+      const reachedTarget = distanceToTarget <= settleTolerance;
+      const barelyMoving =
+        Math.abs(currentY - lastY) <= SCROLL_END_TOLERANCE_PX;
+
+      if (
+        reachedTarget ||
+        (barelyMoving && distanceToTarget <= NEAR_TARGET_TOLERANCE_PX)
+      ) {
+        stableFrameCount += 1;
+      } else {
+        stableFrameCount = 0;
+      }
+
+      const exceededMaxLock = performance.now() - lockStart >= SCROLL_LOCK_MAX_MS;
+      if (stableFrameCount >= SCROLL_STABLE_FRAMES || exceededMaxLock) {
+        isProgrammaticScrollRef.current = false;
+        scrollSettleRafRef.current = null;
+        return;
+      }
+
+      lastY = currentY;
+      scrollSettleRafRef.current = window.requestAnimationFrame(checkSettle);
+    };
+
+    scrollSettleRafRef.current = window.requestAnimationFrame(checkSettle);
   };
 
   return (
@@ -107,6 +212,11 @@ export default function HomeContent({
           </header>
 
           <div className="flex w-full flex-col gap-24">
+            <div
+              className="pointer-events-none"
+              style={{ height: TOP_EDGE_SPACER }}
+              aria-hidden
+            />
             {verses.map((verse, i) => (
               <article
                 key={verse.id}
@@ -133,6 +243,11 @@ export default function HomeContent({
                 </p>
               </article>
             ))}
+            <div
+              className="pointer-events-none"
+              style={{ height: BOTTOM_EDGE_SPACER }}
+              aria-hidden
+            />
           </div>
         </div>
       </main>

@@ -45,7 +45,7 @@ export default function SidebarNav({
           style={{ width: 24 }}
           aria-hidden
         />
-        <p className="text-[11px] font-semibold tracking-wide text-white/80 select-none leading-none">
+        <p className="text-[12px] font-semibold tracking-wide text-white/80 select-none leading-none">
           {/* {surahNumber}.  */}
           {surahTransliteration}
         </p>
@@ -64,7 +64,10 @@ export default function SidebarNav({
           return (
             <motion.li
               key={offset}
-              animate={{ height: inBounds ? "auto" : 0, marginBottom: inBounds ? 0 : -5 }}
+              animate={{
+                height: inBounds ? "auto" : 0,
+                marginBottom: inBounds ? 0 : -5,
+              }}
               transition={{ duration: 0.18 }}
               style={{ overflow: "hidden" }}
             >
@@ -76,7 +79,9 @@ export default function SidebarNav({
                 transition={{ duration: 0.18 }}
                 whileHover={inBounds ? { opacity: 0.9 } : undefined}
                 aria-current={isActive ? "true" : undefined}
-                aria-label={inBounds ? `Go to verse ${verseIndex + 1}` : undefined}
+                aria-label={
+                  inBounds ? `Go to verse ${verseIndex + 1}` : undefined
+                }
               >
                 {/* Dash indicator */}
                 <motion.span
