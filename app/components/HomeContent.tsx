@@ -12,13 +12,10 @@ export type Verse = {
 
 type HomeContentProps = {
   verses: Verse[];
-  surahNumber: number;
   surahTransliteration: string;
 };
 
 const VIEWPORT_ANCHOR_RATIO = 0.38;
-const TOP_EDGE_SPACER = "0px";
-const BOTTOM_EDGE_SPACER = "calc(62vh + 14rem)";
 const SCROLL_END_TOLERANCE_PX = 1;
 const NEAR_TARGET_TOLERANCE_PX = 12;
 const SCROLL_STABLE_FRAMES = 3;
@@ -26,19 +23,13 @@ const SCROLL_LOCK_MAX_MS = 1800;
 
 export default function HomeContent({
   verses,
-  surahNumber,
   surahTransliteration,
 }: HomeContentProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const sectionRefs = useRef<(HTMLElement | null)[]>([]);
-  const activeIndexRef = useRef(0);
   const isProgrammaticScrollRef = useRef(false);
   const scrollSettleRafRef = useRef<number | null>(null);
   const scrollTickRafRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    activeIndexRef.current = activeIndex;
-  }, [activeIndex]);
 
   useEffect(() => {
     const getClosestIndexToAnchor = () => {
@@ -66,14 +57,14 @@ export default function HomeContent({
         scrollTickRafRef.current = null;
         if (isProgrammaticScrollRef.current) return;
         const best = getClosestIndexToAnchor();
-        if (best !== -1 && best !== activeIndexRef.current) {
-          setActiveIndex(best);
-        }
+        if (best !== -1) setActiveIndex(best);
       });
     };
 
     syncActiveFromViewport();
-    window.addEventListener("scroll", syncActiveFromViewport, { passive: true });
+    window.addEventListener("scroll", syncActiveFromViewport, {
+      passive: true,
+    });
     window.addEventListener("resize", syncActiveFromViewport);
 
     return () => {
@@ -83,19 +74,12 @@ export default function HomeContent({
         window.cancelAnimationFrame(scrollTickRafRef.current);
         scrollTickRafRef.current = null;
       }
-    };
-  }, [verses.length]);
-
-  useEffect(() => {
-    return () => {
       if (scrollSettleRafRef.current !== null) {
         window.cancelAnimationFrame(scrollSettleRafRef.current);
-      }
-      if (scrollTickRafRef.current !== null) {
-        window.cancelAnimationFrame(scrollTickRafRef.current);
+        scrollSettleRafRef.current = null;
       }
     };
-  }, []);
+  }, [verses.length]);
 
   const scrollToVerse = (index: number) => {
     const el = sectionRefs.current[index];
@@ -108,7 +92,7 @@ export default function HomeContent({
       window.innerHeight * VIEWPORT_ANCHOR_RATIO;
     const maxScrollY = Math.max(
       0,
-      document.documentElement.scrollHeight - window.innerHeight
+      document.documentElement.scrollHeight - window.innerHeight,
     );
     const targetY = Math.min(Math.max(0, rawTargetY), maxScrollY);
     const isEdgeCase = targetY === 0 || targetY === maxScrollY;
@@ -152,7 +136,8 @@ export default function HomeContent({
         stableFrameCount = 0;
       }
 
-      const exceededMaxLock = performance.now() - lockStart >= SCROLL_LOCK_MAX_MS;
+      const exceededMaxLock =
+        performance.now() - lockStart >= SCROLL_LOCK_MAX_MS;
       if (stableFrameCount >= SCROLL_STABLE_FRAMES || exceededMaxLock) {
         isProgrammaticScrollRef.current = false;
         scrollSettleRafRef.current = null;
@@ -183,7 +168,6 @@ export default function HomeContent({
         activeIndex={activeIndex}
         totalItems={verses.length}
         onItemClick={scrollToVerse}
-        surahNumber={surahNumber}
         surahTransliteration={surahTransliteration}
       />
 
@@ -199,24 +183,13 @@ export default function HomeContent({
               "linear-gradient(to bottom, black 0%, black calc(100% - 260px), rgba(0,0,0,0.85) calc(100% - 230px), transparent calc(100% - 170px), transparent 100%)",
           }}
         >
-          <header className="mb-16 text-center">
-            <h1
-              className="font-arabic text-6xl font-bold leading-relaxed text-foreground"
-              dir="rtl"
-            >
-              الفاتحة
-            </h1>
+          <header className="mb-5 text-center">
             <p className="mt-1 text-lg tracking-widest text-white uppercase">
-              The Opener
+              {surahTransliteration}
             </p>
           </header>
 
-          <div className="flex w-full flex-col gap-24">
-            <div
-              className="pointer-events-none"
-              style={{ height: TOP_EDGE_SPACER }}
-              aria-hidden
-            />
+          <div className="flex w-full flex-col gap-24 pb-[calc(1vh+1rem)]">
             {verses.map((verse, i) => (
               <article
                 key={verse.id}
@@ -243,11 +216,6 @@ export default function HomeContent({
                 </p>
               </article>
             ))}
-            <div
-              className="pointer-events-none"
-              style={{ height: BOTTOM_EDGE_SPACER }}
-              aria-hidden
-            />
           </div>
         </div>
       </main>

@@ -6,7 +6,6 @@ export type SidebarNavProps = {
   activeIndex: number;
   totalItems: number;
   onItemClick: (index: number) => void;
-  surahNumber: number;
   surahTransliteration: string;
 };
 
@@ -27,7 +26,6 @@ export default function SidebarNav({
   activeIndex,
   totalItems,
   onItemClick,
-  surahNumber,
   surahTransliteration,
 }: SidebarNavProps) {
   return (
