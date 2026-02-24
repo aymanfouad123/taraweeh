@@ -1,18 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import SidebarNav from "./SidebarNav";
 import SyncOrb, { type OrbMatchPayload } from "./SyncOrb";
-
-export type Verse = {
-  id: number;
-  text: string;
-  translation: string;
-};
+import type { Verse } from "@/app/lib/quran";
 
 type HomeContentProps = {
   verses: Verse[];
   surahTransliteration: string;
+  surahId: number;
+  initialVerseIndex: number;
 };
 
 const VIEWPORT_ANCHOR_RATIO = 0.38;
@@ -24,8 +22,11 @@ const SCROLL_LOCK_MAX_MS = 1800;
 export default function HomeContent({
   verses,
   surahTransliteration,
+  surahId,
+  initialVerseIndex,
 }: HomeContentProps) {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const router = useRouter();
+  const [activeIndex, setActiveIndex] = useState(initialVerseIndex);
   const sectionRefs = useRef<(HTMLElement | null)[]>([]);
   const isProgrammaticScrollRef = useRef(false);
   const scrollSettleRafRef = useRef<number | null>(null);
@@ -151,7 +152,26 @@ export default function HomeContent({
     scrollSettleRafRef.current = window.requestAnimationFrame(checkSettle);
   };
 
+  // Scroll to initialVerseIndex on mount when arriving via ?verse= param
+  useEffect(() => {
+    if (initialVerseIndex > 0) {
+      const id = window.setTimeout(() => {
+        scrollToVerse(initialVerseIndex);
+      }, 100);
+      return () => window.clearTimeout(id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleOrbMatch = (payload: OrbMatchPayload) => {
+    const matchedSurahRaw = payload.surah;
+    const matchedSurahId =
+      typeof matchedSurahRaw === "number"
+        ? matchedSurahRaw
+        : typeof matchedSurahRaw === "string"
+          ? Number(matchedSurahRaw)
+          : null;
+
     const maybeAyahIndex =
       typeof payload.ayah === "number" ? payload.ayah - 1 : null;
     const maybeDirectIndex =
@@ -160,8 +180,18 @@ export default function HomeContent({
       maybeAyahIndex !== null ? maybeAyahIndex : maybeDirectIndex;
 
     if (nextIndex === null) return;
-    if (nextIndex < 0 || nextIndex >= verses.length) return;
 
+    // Cross-surah: navigate to the matched surah, passing verse as search param
+    if (
+      matchedSurahId !== null &&
+      Number.isFinite(matchedSurahId) &&
+      matchedSurahId !== surahId
+    ) {
+      router.push(`/${matchedSurahId}?verse=${nextIndex + 1}`);
+      return;
+    }
+
+    if (nextIndex < 0 || nextIndex >= verses.length) return;
     scrollToVerse(nextIndex);
   };
 
@@ -199,7 +229,7 @@ export default function HomeContent({
         >
           <header className="mb-20 text-center">
             <p className="font-normal text-lg tracking-widest text-white uppercase">
-              {surahTransliteration}
+              Surah {surahTransliteration}
             </p>
           </header>
 
