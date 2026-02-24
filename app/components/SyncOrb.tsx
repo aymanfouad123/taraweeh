@@ -1,11 +1,338 @@
 // app/components/SyncOrb.tsx
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function SyncOrb() {
+const WINDOW_MS = 12_000;
+const HOP_MS = 10_000;
+const MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/ogg;codecs=opus",
+  "audio/ogg",
+];
+
+type SyncSession = {
+  last_idx: number;
+  state: string;
+  state_entered_at: string;
+  miss_streak: number;
+  pending_idx: number | null;
+  pending_hits: number;
+};
+
+export type OrbMatchPayload = {
+  surah?: number | string;
+  ayah?: number;
+  ar?: string;
+  index?: number;
+  confidence?: number;
+};
+
+type SyncOrbProps = {
+  onMatch?: (payload: OrbMatchPayload) => void;
+};
+
+const INITIAL_SESSION: SyncSession = {
+  last_idx: -1,
+  state: "active",
+  state_entered_at: new Date().toISOString(),
+  miss_streak: 0,
+  pending_idx: null,
+  pending_hits: 0,
+};
+
+type QueueChunk = {
+  blob: Blob;
+  chunkId: number;
+};
+
+function toNumber(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function toString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function reasonLabel(reason: string | null): string {
+  if (!reason) return "Listening";
+  switch (reason) {
+    case "silence":
+      return "Silence";
+    case "low_confidence":
+      return "Low confidence";
+    case "pending_confirmation":
+      return "Pending confirmation";
+    case "lock_hold":
+      return "Locked";
+    default:
+      return reason.replaceAll("_", " ");
+  }
+}
+
+function pickMimeType() {
+  if (typeof MediaRecorder === "undefined") return "";
+  return (
+    MIME_CANDIDATES.find((type) => MediaRecorder.isTypeSupported(type)) ?? ""
+  );
+}
+
+export default function SyncOrb({ onMatch }: SyncOrbProps) {
   const [isActive, setIsActive] = useState(false);
+  const [statusText, setStatusText] = useState("Sync");
+  const [healthReady, setHealthReady] = useState<boolean | null>(null);
+  const [lastMatch, setLastMatch] = useState<OrbMatchPayload | null>(null);
+
+  const sessionRef = useRef<SyncSession>(INITIAL_SESSION);
+  const queueRef = useRef<QueueChunk[]>([]);
+  const isUploadingRef = useRef(false);
+  const isRunningRef = useRef(false);
+
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunkIntervalRef = useRef<number | null>(null);
+  const nextChunkIdRef = useRef(0);
+  const recorderMapRef = useRef<Map<number, MediaRecorder>>(new Map());
+  const mimeTypeRef = useRef("");
+  const uploadAbortRef = useRef<AbortController | null>(null);
+
+  const stopCapture = useCallback(() => {
+    isRunningRef.current = false;
+    setIsActive(false);
+    setStatusText("Sync");
+
+    if (chunkIntervalRef.current !== null) {
+      window.clearInterval(chunkIntervalRef.current);
+      chunkIntervalRef.current = null;
+    }
+
+    for (const recorder of recorderMapRef.current.values()) {
+      if (recorder.state !== "inactive") recorder.stop();
+    }
+    recorderMapRef.current.clear();
+
+    if (streamRef.current) {
+      for (const track of streamRef.current.getTracks()) {
+        track.stop();
+      }
+      streamRef.current = null;
+    }
+  }, []);
+
+  const overwriteSessionFromPayload = useCallback((payload: unknown) => {
+    if (!payload || typeof payload !== "object") return;
+    const asRecord = payload as Record<string, unknown>;
+    const previous = sessionRef.current;
+    const rawPendingIdx = asRecord.pending_idx;
+    let pendingIdx = previous.pending_idx;
+
+    if (rawPendingIdx === null || rawPendingIdx === "") {
+      pendingIdx = null;
+    } else if (
+      typeof rawPendingIdx === "number" &&
+      Number.isFinite(rawPendingIdx)
+    ) {
+      pendingIdx = rawPendingIdx;
+    } else if (typeof rawPendingIdx === "string") {
+      const parsedPending = Number(rawPendingIdx);
+      if (Number.isFinite(parsedPending)) pendingIdx = parsedPending;
+    }
+
+    sessionRef.current = {
+      last_idx: toNumber(asRecord.last_idx, previous.last_idx),
+      state: toString(asRecord.state, previous.state),
+      state_entered_at: toString(
+        asRecord.state_entered_at,
+        previous.state_entered_at,
+      ),
+      miss_streak: toNumber(asRecord.miss_streak, previous.miss_streak),
+      pending_idx: pendingIdx,
+      pending_hits: toNumber(asRecord.pending_hits, previous.pending_hits),
+    };
+  }, []);
+
+  const uploadQueue = useCallback(async () => {
+    if (isUploadingRef.current) return;
+    isUploadingRef.current = true;
+
+    try {
+      while (queueRef.current.length > 0) {
+        const next = queueRef.current.shift();
+        if (!next) continue;
+
+        const form = new FormData();
+        const fileName = `chunk-${next.chunkId}.webm`;
+        form.append("audio", next.blob, fileName);
+
+        const currentSession = sessionRef.current;
+        form.append("last_idx", String(currentSession.last_idx));
+        form.append("state", currentSession.state);
+        form.append("state_entered_at", currentSession.state_entered_at);
+        form.append("miss_streak", String(currentSession.miss_streak));
+        form.append(
+          "pending_idx",
+          currentSession.pending_idx === null
+            ? ""
+            : String(currentSession.pending_idx),
+        );
+        form.append("pending_hits", String(currentSession.pending_hits));
+
+        uploadAbortRef.current = new AbortController();
+        const response = await fetch("/sync", {
+          method: "POST",
+          body: form,
+          signal: uploadAbortRef.current.signal,
+        });
+        uploadAbortRef.current = null;
+
+        const payload: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          setStatusText("Sync error");
+          continue;
+        }
+
+        overwriteSessionFromPayload(payload);
+
+        if (!payload || typeof payload !== "object") continue;
+        const asRecord = payload as Record<string, unknown>;
+
+        if (asRecord.match === true) {
+          const nextMatch: OrbMatchPayload = {
+            surah: asRecord.surah as number | string | undefined,
+            ayah: toNumber(asRecord.ayah, NaN),
+            ar: asRecord.ar as string | undefined,
+            index: toNumber(asRecord.index, NaN),
+            confidence: toNumber(asRecord.confidence, NaN),
+          };
+
+          if (Number.isNaN(nextMatch.ayah ?? NaN)) delete nextMatch.ayah;
+          if (Number.isNaN(nextMatch.index ?? NaN)) delete nextMatch.index;
+          if (Number.isNaN(nextMatch.confidence ?? NaN))
+            delete nextMatch.confidence;
+
+          setLastMatch(nextMatch);
+          setStatusText("Listening");
+          onMatch?.(nextMatch);
+          continue;
+        }
+
+        const reason =
+          typeof asRecord.reason === "string" ? asRecord.reason : null;
+        setStatusText(reasonLabel(reason));
+      }
+    } catch {
+      setStatusText("Sync error");
+    } finally {
+      uploadAbortRef.current = null;
+      isUploadingRef.current = false;
+      if (queueRef.current.length > 0) void uploadQueue();
+    }
+  }, [onMatch, overwriteSessionFromPayload]);
+
+  const enqueueChunk = useCallback(
+    (blob: Blob, chunkId: number) => {
+      queueRef.current.push({ blob, chunkId });
+      void uploadQueue();
+    },
+    [uploadQueue],
+  );
+
+  const startChunkRecorder = useCallback(
+    (chunkId: number) => {
+      if (!streamRef.current) return;
+
+      const options = mimeTypeRef.current
+        ? { mimeType: mimeTypeRef.current }
+        : undefined;
+      const recorder = new MediaRecorder(streamRef.current, options);
+      const parts: BlobPart[] = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) parts.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        recorderMapRef.current.delete(chunkId);
+        if (parts.length === 0) return;
+        const blob = new Blob(parts, {
+          type: recorder.mimeType || mimeTypeRef.current || "audio/webm",
+        });
+        enqueueChunk(blob, chunkId);
+      };
+
+      recorder.onerror = () => {
+        setStatusText("Mic error");
+      };
+
+      recorderMapRef.current.set(chunkId, recorder);
+      recorder.start();
+
+      window.setTimeout(() => {
+        if (recorder.state !== "inactive") recorder.stop();
+      }, WINDOW_MS);
+    },
+    [enqueueChunk],
+  );
+
+  const startCapture = useCallback(async () => {
+    if (isRunningRef.current) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      mimeTypeRef.current = pickMimeType();
+      isRunningRef.current = true;
+      setIsActive(true);
+      setStatusText("Listening");
+
+      nextChunkIdRef.current = 0;
+      startChunkRecorder(nextChunkIdRef.current);
+      nextChunkIdRef.current += 1;
+
+      chunkIntervalRef.current = window.setInterval(() => {
+        if (!isRunningRef.current) return;
+        startChunkRecorder(nextChunkIdRef.current);
+        nextChunkIdRef.current += 1;
+      }, HOP_MS);
+    } catch {
+      stopCapture();
+      setStatusText("Mic blocked");
+    }
+  }, [startChunkRecorder, stopCapture]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const runHealthCheck = async () => {
+      try {
+        const response = await fetch("/health", { method: "GET" });
+        if (!cancelled) setHealthReady(response.ok);
+      } catch {
+        if (!cancelled) setHealthReady(false);
+      }
+    };
+
+    void runHealthCheck();
+    return () => {
+      cancelled = true;
+      stopCapture();
+      uploadAbortRef.current?.abort();
+    };
+  }, [stopCapture]);
+
+  const toggleCapture = () => {
+    if (isActive) {
+      stopCapture();
+      return;
+    }
+    void startCapture();
+  };
 
   return (
     <div className="flex flex-col items-center gap-0">
@@ -14,7 +341,7 @@ export default function SyncOrb() {
         <div style={{ filter: "drop-shadow(0 18px 45px rgba(0,0,0,0.55))" }}>
           <motion.button
             className="relative flex h-28 w-28 items-center justify-center"
-            onClick={() => setIsActive(!isActive)}
+            onClick={toggleCapture}
             whileTap={{ scale: 0.9 }}
             transition={{ type: "spring", stiffness: 420, damping: 22 }}
             aria-label={isActive ? "Stop syncing" : "Start syncing"}
@@ -126,16 +453,25 @@ export default function SyncOrb() {
       <div className="flex h-0 items-center justify-center">
         <AnimatePresence mode="wait">
           <motion.span
-            key={isActive ? "listening" : "sync"}
+            key={isActive ? statusText : "sync"}
             className="text-[11px] tracking-[0.22em] text-white uppercase select-none"
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.2 }}
           >
-            {isActive ? "Listening" : "Sync"}
+            {isActive ? statusText : "Sync"}
           </motion.span>
         </AnimatePresence>
+      </div>
+
+      <div className="mt-6 flex flex-col items-center justify-start gap-1 text-[10px] leading-none text-white/70">
+        {/* <span>{healthReady === false ? "Sync backend offline" : " "}</span> */}
+        <span>
+          {lastMatch?.surah !== undefined && lastMatch?.ayah !== undefined
+            ? `Surah ${String(lastMatch.surah)} • Ayah ${String(lastMatch.ayah)}`
+            : " "}
+        </span>
       </div>
     </div>
   );
