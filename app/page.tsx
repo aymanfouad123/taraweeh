@@ -1,13 +1,25 @@
-import quranData from "@/data/quran_en.json";
-import HomeContent from "./components/HomeContent";
+import type { Metadata } from "next";
+import { quranData } from "@/app/lib/quran";
+import SurahList from "./components/SurahList";
 
-const surah = quranData[2]; // Ali 'Imran (0-indexed: 0=Al-Fatihah, 1=Al-Baqarah, 2=Ali 'Imran)
+export const metadata: Metadata = {
+  title: "Taraweeh",
+  description: "Follow along with the Taraweeh prayer",
+};
 
-export default function Home() {
-  return (
-    <HomeContent
-      verses={surah.verses}
-      surahTransliteration={surah.transliteration}
-    />
+export default function HomePage() {
+  // Strip verses before serialising to the client — avoids sending ~2.4 MB of
+  // verse text through the RSC payload for a page that only needs surah names.
+  const surahs = quranData.map(
+    ({ id, name, transliteration, translation, type, total_verses }) => ({
+      id,
+      name,
+      transliteration,
+      translation,
+      type,
+      total_verses,
+    }),
   );
+
+  return <SurahList surahs={surahs} />;
 }
