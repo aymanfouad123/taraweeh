@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import SidebarNav from "./SidebarNav";
-import SyncOrb from "./SyncOrb";
+import SyncOrb, { type OrbMatchPayload } from "./SyncOrb";
 
 export type Verse = {
   id: number;
@@ -151,6 +151,20 @@ export default function HomeContent({
     scrollSettleRafRef.current = window.requestAnimationFrame(checkSettle);
   };
 
+  const handleOrbMatch = (payload: OrbMatchPayload) => {
+    const maybeAyahIndex =
+      typeof payload.ayah === "number" ? payload.ayah - 1 : null;
+    const maybeDirectIndex =
+      typeof payload.index === "number" ? payload.index : null;
+    const nextIndex =
+      maybeAyahIndex !== null ? maybeAyahIndex : maybeDirectIndex;
+
+    if (nextIndex === null) return;
+    if (nextIndex < 0 || nextIndex >= verses.length) return;
+
+    scrollToVerse(nextIndex);
+  };
+
   return (
     <div className="relative min-h-svh font-sans">
       {/* Fixed background */}
@@ -183,8 +197,8 @@ export default function HomeContent({
               "linear-gradient(to bottom, black 0%, black calc(100% - 260px), rgba(0,0,0,0.85) calc(100% - 230px), transparent calc(100% - 170px), transparent 100%)",
           }}
         >
-          <header className="mb-5 text-center">
-            <p className="mt-1 text-lg tracking-widest text-white uppercase">
+          <header className="mb-20 text-center">
+            <p className="font-normal text-lg tracking-widest text-white uppercase">
               {surahTransliteration}
             </p>
           </header>
@@ -199,12 +213,12 @@ export default function HomeContent({
                 id={`verse-${verse.id}`}
                 className="flex flex-col items-center gap-2.5 scroll-mt-24"
               >
-                <span className="text-xs tabular-nums text-white mb-7">
+                <span className="text-xs tabular-nums text-white mb-5">
                   {verse.id}
                 </span>
 
                 <p
-                  className="font-arabic text-center text-[1.75rem] leading-[2.8] font-medium text-foreground sm:text-3xl"
+                  className="font-arabic text-center text-[1.75rem] leading-[2.8] font-semibold text-foreground sm:text-3xl"
                   dir="rtl"
                   lang="ar"
                 >
@@ -242,7 +256,7 @@ export default function HomeContent({
           style={{ paddingBottom: "calc(22px + env(safe-area-inset-bottom))" }}
         >
           <div className="pointer-events-auto">
-            <SyncOrb />
+            <SyncOrb onMatch={handleOrbMatch} />
           </div>
         </div>
       </div>

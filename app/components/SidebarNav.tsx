@@ -11,12 +11,12 @@ export type SidebarNavProps = {
 
 const OPACITY_BY_DISTANCE: Record<number, number> = {
   0: 1.0,
-  1: 0.72,
-  2: 0.5,
-  3: 0.32,
-  4: 0.18,
-  5: 0.07,
-  6: 0,
+  1: 0.82,
+  2: 0.64,
+  3: 0.46,
+  4: 0.3,
+  5: 0.16,
+  6: 0.06,
 };
 
 const WINDOW_HALF = 6;
