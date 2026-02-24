@@ -335,9 +335,9 @@ export default function SyncOrb({ onMatch }: SyncOrbProps) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-0">
+    <div className="flex flex-col items-center gap-2">
       {/* Fixed-size frame keeps orb + label center stable during animations */}
-      <div className="relative flex h-36 w-36 items-center justify-center">
+      <div className="relative flex w-36 items-center justify-center">
         <div style={{ filter: "drop-shadow(0 18px 45px rgba(0,0,0,0.55))" }}>
           <motion.button
             className="relative flex h-28 w-28 items-center justify-center"
